@@ -2,6 +2,9 @@
 #include <pcl/io/ply_io.h>
 #include <pcl_ros/point_cloud.h>
 
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl/conversions.h>
+
 #include "ground_segmentation/ground_segmentation.h"
 
 class SegmentationNode {
@@ -15,21 +18,44 @@ public:
                    const std::string& obstacle_topic,
                    const GroundSegmentationParams& params,
                    const bool& latch = false) : params_(params) {
-    ground_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>(ground_topic, 1, latch);
-    obstacle_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>(obstacle_topic, 1, latch);
+    // TODO: Change these to advertise point cloud 2 data
+    ground_pub_ = nh.advertise<sensor_msgs::PointCloud2>(ground_topic, 1, latch);
+    obstacle_pub_ = nh.advertise<sensor_msgs::PointCloud2>(obstacle_topic, 1, latch);
+
+    // ground_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>(ground_topic, 1, latch);
+    // obstacle_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>(obstacle_topic, 1, latch);
   }
 
-  void scanCallback(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
+  // void scanCallback(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
+  void scanCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg) {
     GroundSegmentation segmenter(params_);
     std::vector<int> labels;
 
+    // Container for input data
+    pcl::PCLPointCloud2 *cloud2 = new pcl::PCLPointCloud2;
+    pcl::PCLPointCloud2ConstPtr cloudPtr(cloud2);
+
+    // Convert given message into PCL data type
+    pcl_conversions::toPCL(*cloud_msg, *cloud2);
+    
+    // PCL pointcloud2 to pointcloud
+    pcl::PointCloud<pcl::PointXYZ> cloud;
+    pcl::fromPCLPointCloud2(*cloud2, cloud);
+
+    // Perform segmentation
     segmenter.segment(cloud, &labels);
-    pcl::PointCloud<pcl::PointXYZ> ground_cloud, obstacle_cloud;
+
+    // We should be able to just index the OS1 pointcloud2 message using 'label'
+    pcl::PCLPointCloud2 ground_cloud, obstacle_cloud;
+    // pcl::PointCloud<pcl::PointXYZ> ground_cloud, obstacle_cloud;
+
     ground_cloud.header = cloud.header;
     obstacle_cloud.header = cloud.header;
+
+    // TODO: find out how to add points to 
     for (size_t i = 0; i < cloud.size(); ++i) {
-      if (labels[i] == 1) ground_cloud.push_back(cloud[i]);
-      else obstacle_cloud.push_back(cloud[i]);
+      if (labels[i] == 1) ground_cloud.push_back(cloud2[i]);
+      else obstacle_cloud.push_back(cloud2[i]);
     }
     ground_pub_.publish(ground_cloud);
     obstacle_pub_.publish(obstacle_cloud);
