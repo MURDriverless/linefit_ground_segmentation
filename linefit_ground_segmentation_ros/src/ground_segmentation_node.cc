@@ -1,12 +1,18 @@
 #include <ros/ros.h>
 #include <pcl/io/ply_io.h>
 #include <pcl_ros/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <mur_common/timing_msg.h>
 
 #include "ground_segmentation/ground_segmentation.h"
+
+#define HEALTH_TOPIC "/mur/lidar/segmentation_health"
+#define PCL_TO_ROS_FACTOR 1000
 
 class SegmentationNode {
   ros::Publisher ground_pub_;
   ros::Publisher obstacle_pub_;
+  ros::Publisher health_pub_;
   GroundSegmentationParams params_;
 
 public:
@@ -17,9 +23,27 @@ public:
                    const bool& latch = false) : params_(params) {
     ground_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>(ground_topic, 1, latch);
     obstacle_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ>>(obstacle_topic, 1, latch);
+    health_pub_ = nh.advertise<mur_common::timing_msg>(HEALTH_TOPIC, 1);
+  }
+
+  void pushHealth(uint64_t logic_start, uint64_t logic_end, uint64_t lidar_start) {
+    mur_common::timing_msg h;
+    uint64_t current = ros::Time::now().toNSec();
+
+    float logic_time = (logic_end - logic_start) * 1e-6;
+    float lidar_time = (current - PCL_TO_ROS_FACTOR * lidar_start) * 1e-6;
+
+    h.compute_time = logic_time;
+    h.full_compute_time = lidar_time;
+    h.header.stamp = ros::Time::now();
+
+    health_pub_.publish(h);
   }
 
   void scanCallback(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
+    ros::WallTime start, end;
+    start = ros::WallTime::now();
+
     GroundSegmentation segmenter(params_);
     std::vector<int> labels;
 
@@ -31,8 +55,13 @@ public:
       if (labels[i] == 1) ground_cloud.push_back(cloud[i]);
       else obstacle_cloud.push_back(cloud[i]);
     }
+
+    end = ros::WallTime::now();
+
     ground_pub_.publish(ground_cloud);
     obstacle_pub_.publish(obstacle_cloud);
+
+    pushHealth(start.toNSec(), end.toNSec(), cloud.header.stamp);
   }
 };
 

@@ -1,13 +1,18 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(linefit_ground_segmentation_ros)
 
-find_package(catkin_simple 0.1.0 REQUIRED )
+find_package(catkin_simple 0.1.0 REQUIRED
+    mur_common
+)
 
 catkin_simple(ALL_DEPS_REQUIRED)
 
 add_definitions(-std=c++11 -g)
 
-find_package(PCL REQUIRED)
+find_package(
+    PCL REQUIRED
+)
+
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
